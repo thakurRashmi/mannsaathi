@@ -8,6 +8,14 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Ollama runs on the host Mac (via `brew services start ollama`),
+      # not inside Docker. host.docker.internal is Docker's magic hostname
+      # that points back to the host machine from inside a container.
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    extra_hosts:
+      # Required on Linux; harmless on macOS where it's already mapped.
+      - "host.docker.internal:host-gateway"
     volumes:
       # Live-reload: changes on host are reflected inside the container.
       - ./backend/app:/app/app

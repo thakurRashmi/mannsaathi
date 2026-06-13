@@ -6,6 +6,9 @@ pydantic-settings==2.6.0
 
 # AI / agents (added incrementally as we build)
 langchain==0.3.7
+langchain-core==0.3.15
+langchain-ollama==0.2.0
+# Keep Gemini installed too so we can swap providers easily.
 langchain-google-genai==2.0.4
 langgraph==0.2.45
 

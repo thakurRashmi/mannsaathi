@@ -9,12 +9,14 @@ client = TestClient(app)
 def test_health_returns_ok() -> None:
     res = client.get("/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok", "service": "mannsaathi-backend"}
-
-
-def test_chat_echoes_user_message() -> None:
-    res = client.post("/api/chat", json={"message": "hello"})
-    assert res.status_code == 200
     body = res.json()
-    assert "hello" in body["reply"]
-    assert body["is_crisis"] is False
+    assert body["status"] == "ok"
+    assert body["service"] == "mannsaathi-backend"
+    # llm_provider field is informational; just confirm it's present.
+    assert "llm_provider" in body
+
+
+def test_chat_request_validates_input() -> None:
+    """Empty messages should be rejected by Pydantic validation."""
+    res = client.post("/api/chat", json={"message": ""})
+    assert res.status_code == 422  # validation error

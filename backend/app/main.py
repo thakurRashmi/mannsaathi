@@ -35,11 +35,26 @@ app.include_router(chat_router)
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Liveness probe for Docker / Kubernetes."""
-    return {"status": "ok", "service": "mannsaathi-backend"}
+    return {
+        "status": "ok",
+        "service": "mannsaathi-backend",
+        "llm_provider": settings.llm_provider,
+    }
 
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    log.info("MannSaathi backend starting up")
-    if not settings.google_api_key:
-        log.warning("GOOGLE_API_KEY is not set — LLM calls will fail when wired up")
+    log.info(
+        "MannSaathi backend starting up :: llm_provider=%s",
+        settings.llm_provider,
+    )
+    if settings.llm_provider == "gemini" and not settings.google_api_key:
+        log.warning(
+            "LLM_PROVIDER=gemini but GOOGLE_API_KEY is empty — chat will fail"
+        )
+    if settings.llm_provider == "ollama":
+        log.info(
+            "Using Ollama at %s with model %s",
+            settings.ollama_base_url,
+            settings.ollama_model,
+        )
