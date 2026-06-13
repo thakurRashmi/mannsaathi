@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mannsaathi-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Live-reload: changes on host are reflected inside the container.
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mannsaathi-frontend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Inside the browser, the API is reachable at localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    depends_on:
+      backend:
+        condition: service_healthy

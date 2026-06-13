@@ -1,0 +1,33 @@
+# Env / secrets
+.env
+.env.local
+*.key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.log
+
+# SQLite databases (local dev)
+*.db
+*.db-journal
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Docker
+.docker-data/
