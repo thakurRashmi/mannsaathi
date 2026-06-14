@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = {
+  role: "user" | "assistant";
+  content: string;
+  // When set, the assistant message is a crisis escalation — render with
+  // the prominent helpline treatment instead of a normal bubble.
+  isCrisis?: boolean;
+};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -34,7 +40,11 @@ export default function ChatPage() {
       const data = await res.json();
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: data.reply ?? "(no reply)" },
+        {
+          role: "assistant",
+          content: data.reply ?? "(no reply)",
+          isCrisis: Boolean(data.is_crisis),
+        },
       ]);
     } catch (err) {
       setMessages((m) => [
@@ -57,22 +67,30 @@ export default function ChatPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 py-6 max-w-2xl w-full mx-auto space-y-4">
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`rounded-2xl px-4 py-3 max-w-[80%] text-sm leading-relaxed ${
-                m.role === "user"
-                  ? "bg-sage-500 text-white"
-                  : "bg-white text-gray-800 shadow-sm"
-              }`}
-            >
-              {m.content}
+        {messages.map((m, i) => {
+          if (m.role === "user") {
+            return (
+              <div key={i} className="flex justify-end">
+                <div className="rounded-2xl px-4 py-3 max-w-[80%] text-sm leading-relaxed bg-sage-500 text-white">
+                  {m.content}
+                </div>
+              </div>
+            );
+          }
+
+          // Assistant message — either crisis card or normal bubble.
+          if (m.isCrisis) {
+            return <CrisisCard key={i} content={m.content} />;
+          }
+
+          return (
+            <div key={i} className="flex justify-start">
+              <div className="rounded-2xl px-4 py-3 max-w-[80%] text-sm leading-relaxed bg-white text-gray-800 shadow-sm">
+                {m.content}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {loading && (
           <div className="text-sm text-gray-400 italic">listening…</div>
         )}
@@ -103,5 +121,45 @@ export default function ChatPage() {
         </p>
       </footer>
     </main>
+  );
+}
+
+/**
+ * CrisisCard renders the safety escalation. Visually distinct from chat
+ * bubbles so the user immediately understands this is different — warm
+ * background, larger, helpline numbers as tap-to-call links.
+ */
+function CrisisCard({ content }: { content: string }) {
+  // The backend sends the canned text with newlines + emoji markers.
+  // We split into lines and detect helpline rows ("📞 Name: number").
+  const lines = content.split("\n").filter((l) => l.trim().length > 0);
+
+  return (
+    <div className="flex justify-start">
+      <div className="w-full max-w-xl rounded-2xl border-2 border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
+        <div className="text-sm leading-relaxed text-gray-800 space-y-2">
+          {lines.map((line, i) => {
+            // Helpline lines look like "📞 iCall (free): 9152987821"
+            const phoneMatch = line.match(/(\+?\d[\d\-\s]{6,})$/);
+            if (line.startsWith("📞") && phoneMatch) {
+              const phone = phoneMatch[1].replace(/[\s\-]/g, "");
+              const labelPart = line.slice(0, line.lastIndexOf(phoneMatch[1])).trim();
+              return (
+                <div key={i} className="flex items-center justify-between gap-3 py-1">
+                  <span className="text-gray-700">{labelPart}</span>
+                  <a
+                    href={`tel:${phone}`}
+                    className="inline-block rounded-full bg-rose-500 hover:bg-rose-600 transition-colors text-white text-xs font-medium px-3 py-1.5 whitespace-nowrap"
+                  >
+                    Call {phoneMatch[1].trim()}
+                  </a>
+                </div>
+              );
+            }
+            return <p key={i}>{line}</p>;
+          })}
+        </div>
+      </div>
+    </div>
   );
 }

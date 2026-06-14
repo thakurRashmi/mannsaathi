@@ -34,15 +34,21 @@ class GraphState(TypedDict, total=False):
     each node's returned partial state into the running state.
 
     Fields:
-      user_message: the new user input for this turn (set once, read by all)
-      history:      prior conversation (set once, read by all)
-      route:        which agent to invoke (set by Triage)
-      route_reason: why Triage chose that route (debugging / observability)
-      reply:        the final assistant response (set by whichever agent ran)
+      user_message:        the new user input for this turn (set once)
+      history:             prior conversation (set once)
+      is_crisis:           True if the crisis gate fired (set by gate)
+      crisis_rules_fired:  did the rules layer flag (observability)
+      crisis_llm_fired:    did the LLM layer flag (observability)
+      route:               which agent to invoke (set by Triage)
+      route_reason:        why Triage chose that route (observability)
+      reply:               the final assistant response (set by some node)
     """
 
     user_message: str
     history: List[ChatTurn]
+    is_crisis: bool
+    crisis_rules_fired: bool
+    crisis_llm_fired: bool
     route: Route
     route_reason: str
     reply: str

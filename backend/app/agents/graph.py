@@ -6,31 +6,37 @@ Visual:
                    │  START   │
                    └────┬─────┘
                         ▼
-                   ┌──────────┐
-                   │  triage  │   (1 LLM call — fast classifier)
-                   └────┬─────┘
+                ┌───────────────┐
+                │ crisis_gate   │   safety-critical, ALWAYS first
+                └───────┬───────┘
                         │
-       ┌────────────────┼─────────────────┐
-       ▼                ▼                 ▼
-  ┌──────────┐   ┌──────────────┐   ┌──────────────────┐
-  │ listener │   │  reflector   │   │ advice_redirect  │
-  └────┬─────┘   └──────┬───────┘   └─────────┬────────┘
-       └────────────────┴─────────────────────┘
-                        ▼
-                   ┌──────────┐
-                   │   END    │
-                   └──────────┘
+            ┌───────────┴───────────┐
+            │ is_crisis?            │
+            └───────┬───────────────┘
+        true ┌──────┴──────┐ false
+             ▼             ▼
+       ┌──────────┐   ┌──────────┐
+       │  crisis  │   │  triage  │
+       │ response │   └────┬─────┘
+       └────┬─────┘        │
+            │       ┌──────┼──────────────┐
+            │       ▼      ▼              ▼
+            │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐
+            │  │ listener │ │ reflector│ │ advice_redirect  │
+            │  └────┬─────┘ └────┬─────┘ └─────────┬────────┘
+            │       └────────────┼─────────────────┘
+            └────────────────────┼─────────────────────────┐
+                                 ▼                         │
+                            ┌────────┐                     │
+                            │  END   │ ◄───────────────────┘
+                            └────────┘
 
-In Task #6 we'll insert a Crisis Detector node BEFORE triage as a
-non-negotiable safety gate — if it fires, the whole graph short-circuits
-to the crisis-response path and bypasses every LLM downstream.
-
-Why a graph instead of just `if/else` in Python:
-  - LangGraph gives us free observability (you can trace which nodes ran)
-  - State updates are explicit and typed
-  - Easy to add new nodes / branches without restructuring code
-  - Composable: the graph itself is a runnable that we can wrap with
-    checkpointing, retries, streaming, etc., in later tasks
+Safety contract:
+  When `crisis_gate` returns is_crisis=True, the graph short-circuits to
+  `crisis_response`, which returns a HARD-CODED helpline message. No
+  LLM is consulted to generate the user-facing reply. This is the entire
+  point of the gate — to make it architecturally impossible for an LLM
+  hallucination to reach a user in crisis.
 """
 from __future__ import annotations
 
@@ -40,6 +46,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.advice_redirect import redirect_for_advice
+from app.agents.crisis_gate import evaluate as crisis_evaluate
 from app.agents.listener import listen
 from app.agents.reflector import reflect
 from app.agents.state import ChatTurn, GraphState, Route, empty_state
@@ -49,8 +56,38 @@ log = logging.getLogger("mannsaathi.agents.graph")
 
 
 # ---- Node implementations ----------------------------------------------------
-# Each node receives the current GraphState and returns a PARTIAL update.
-# LangGraph merges the partial back into the running state automatically.
+
+
+async def _crisis_gate_node(state: GraphState) -> dict[str, Any]:
+    """Run the hybrid rules+LLM crisis check before anything else."""
+    decision = await crisis_evaluate(state["user_message"])
+    update: dict[str, Any] = {
+        "is_crisis": decision.is_crisis,
+        "crisis_rules_fired": decision.rules_fired,
+        "crisis_llm_fired": decision.llm_fired,
+    }
+    # If it's crisis, also set the response now — it's a hard-coded string.
+    # This makes the `crisis_response` node essentially a no-op pass-through,
+    # but keeping it as a separate node makes the graph diagram readable.
+    if decision.is_crisis and decision.response_text:
+        update["reply"] = decision.response_text
+    return update
+
+
+async def _crisis_response_node(state: GraphState) -> dict[str, Any]:
+    """
+    Crisis path terminal node. We keep it as a separate node (rather than
+    going directly from the gate to END) so the graph topology clearly
+    shows crisis as a distinct branch.
+
+    IMPORTANT: every node MUST return at least one state field. LangGraph
+    raises InvalidUpdateError on an empty {} update (with a confusingly
+    worded error message). So we always return `reply` here — either
+    re-affirming what the gate set, or falling back to the canned text.
+    """
+    from app.agents.crisis_gate import CRISIS_RESPONSE_TEXT
+
+    return {"reply": state.get("reply") or CRISIS_RESPONSE_TEXT}
 
 
 async def _triage_node(state: GraphState) -> dict[str, Any]:
@@ -86,11 +123,16 @@ async def _advice_redirect_node(state: GraphState) -> dict[str, Any]:
     return {"reply": reply}
 
 
-# ---- Routing function -------------------------------------------------------
-# After `triage`, LangGraph calls this to decide which node runs next.
+# ---- Routing functions ------------------------------------------------------
+
+
+def _after_crisis_gate(state: GraphState) -> str:
+    """Branch from crisis_gate: 'crisis_response' if flagged, else 'triage'."""
+    return "crisis_response" if state.get("is_crisis") else "triage"
 
 
 def _select_agent(state: GraphState) -> Route:
+    """Branch from triage: route to the picked specialized agent."""
     return state.get("route", "listener")
 
 
@@ -100,15 +142,31 @@ def _select_agent(state: GraphState) -> Route:
 def _build_graph():
     g = StateGraph(GraphState)
 
+    # Nodes
+    g.add_node("crisis_gate", _crisis_gate_node)
+    g.add_node("crisis_response", _crisis_response_node)
     g.add_node("triage", _triage_node)
     g.add_node("listener", _listener_node)
     g.add_node("reflector", _reflector_node)
     g.add_node("advice_redirect", _advice_redirect_node)
 
-    g.add_edge(START, "triage")
+    # Entry: always go through the crisis gate first.
+    g.add_edge(START, "crisis_gate")
 
-    # Conditional edge: after triage runs, pick which agent node executes.
-    # The dict maps the Route enum value -> destination node name.
+    # After the gate: either short-circuit to crisis_response, or proceed.
+    g.add_conditional_edges(
+        "crisis_gate",
+        _after_crisis_gate,
+        {
+            "crisis_response": "crisis_response",
+            "triage": "triage",
+        },
+    )
+
+    # Crisis path goes straight to END (no LLM in the user-facing reply).
+    g.add_edge("crisis_response", END)
+
+    # Normal path: triage -> one of three agents -> END.
     g.add_conditional_edges(
         "triage",
         _select_agent,
@@ -118,18 +176,13 @@ def _build_graph():
             "advice_redirect": "advice_redirect",
         },
     )
-
-    # All agent nodes converge to END.
     g.add_edge("listener", END)
     g.add_edge("reflector", END)
     g.add_edge("advice_redirect", END)
 
-    # `.compile()` returns a Runnable we can invoke per-request.
     return g.compile()
 
 
-# Compile the graph once at module load — same lifecycle as the LLM client.
-# (Each request reuses the compiled graph; only the state is per-request.)
 _GRAPH = _build_graph()
 
 
@@ -140,14 +193,22 @@ async def run_conversation(
     Entry point used by the chat API.
 
     Returns a dict with at least:
-      - reply (str)        : the assistant response
-      - route (str)        : which agent ran (for logging / future telemetry)
-      - route_reason (str) : why the router picked that agent
+      reply           (str)  : the assistant response
+      is_crisis       (bool) : whether the safety gate fired
+      route           (str)  : which agent answered (or "crisis_response")
+      route_reason    (str)  : why
+      crisis_rules_fired (bool)
+      crisis_llm_fired   (bool)
     """
     initial = empty_state(user_message=user_message, history=history)
     final_state = await _GRAPH.ainvoke(initial)
+
+    is_crisis = bool(final_state.get("is_crisis", False))
     return {
         "reply": final_state.get("reply", ""),
-        "route": final_state.get("route", "listener"),
+        "is_crisis": is_crisis,
+        "route": "crisis_response" if is_crisis else final_state.get("route", "listener"),
         "route_reason": final_state.get("route_reason", ""),
+        "crisis_rules_fired": bool(final_state.get("crisis_rules_fired", False)),
+        "crisis_llm_fired": bool(final_state.get("crisis_llm_fired", False)),
     }

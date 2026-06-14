@@ -1,10 +1,9 @@
 """
 Chat endpoint. Runs the LangGraph conversation graph for each turn.
 
-The HTTP contract here is intentionally simple — request in, reply out.
-All the multi-agent complexity lives behind `agents.graph.run_conversation`.
-Swapping the agent topology (adding a Crisis Detector in Task #6, adding
-memory layers later) does NOT change this file.
+The HTTP contract here is intentionally simple — request in, reply out
+plus a few observability fields. All the multi-agent + safety complexity
+lives behind `agents.graph.run_conversation`.
 """
 import logging
 from typing import Literal, Optional
@@ -31,13 +30,14 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
-    # When crisis detection kicks in (Task #6), this flag tells the frontend
-    # to show the helpline escalation UI instead of a normal chat bubble.
+    # Tells the frontend to render the crisis escalation UI (helpline
+    # numbers, "you matter" framing) instead of a normal chat bubble.
     is_crisis: bool = False
-    # Observability fields — useful in dev / interview demos, ignored by the
-    # current frontend. Lets you see "which agent answered me and why".
+    # Observability — useful in dev, ignored by current frontend.
     route: Optional[str] = None
     route_reason: Optional[str] = None
+    crisis_rules_fired: Optional[bool] = None
+    crisis_llm_fired: Optional[bool] = None
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -48,14 +48,20 @@ async def chat(req: ChatRequest) -> ChatResponse:
             user_message=req.message, history=history
         )
         log.info(
-            "chat :: route=%s reason=%s",
+            "chat :: is_crisis=%s route=%s reason=%s rules=%s llm=%s",
+            result.get("is_crisis"),
             result.get("route"),
             result.get("route_reason"),
+            result.get("crisis_rules_fired"),
+            result.get("crisis_llm_fired"),
         )
         return ChatResponse(
             reply=result["reply"],
+            is_crisis=bool(result.get("is_crisis", False)),
             route=result.get("route"),
             route_reason=result.get("route_reason"),
+            crisis_rules_fired=result.get("crisis_rules_fired"),
+            crisis_llm_fired=result.get("crisis_llm_fired"),
         )
     except Exception as e:
         log.exception("chat endpoint failed: %s", e)
