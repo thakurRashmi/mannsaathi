@@ -4,6 +4,8 @@
 
 **Status:** ✅ Working MVP. Local development on Docker.
 
+![MannSaathi landing page](docs/screenshots/01-landing.png)
+
 ---
 
 ## Why this exists
@@ -16,6 +18,22 @@ MannSaathi is built for that middle space:
 - A safety layer that recognizes real crisis language and routes users to vetted human helplines
 
 It's intentionally narrow: low-friction, available at 2am, on-device. For anything clinical, it surfaces the right phone numbers.
+
+---
+
+## What it looks like
+
+A natural conversation — the Listener agent reflects feelings first, asks one gentle follow-up, and acknowledges its own scope honestly when asked for clinical advice.
+
+![Conversation with the Listener agent](docs/screenshots/02-listener-conversation.png)
+
+And the safety architecture working — same conversation showing **three different system behaviors in one screen**:
+
+- *"I am tired of being here. Nothing matters anymore."* → LLM classifier catches the euphemism, gate fires, rose helpline card replaces the normal chat bubble. No LLM-generated reply in the crisis path.
+- *"I had a rough day, my boss yelled at me"* → routed to the Listener agent. Normal reply.
+- *"I don't have friends at office and This deadline is killing me"* → recognized as figurative; LLM picks up the loneliness underneath.
+
+![Three different system behaviors in one conversation](docs/screenshots/03-safety-demo.png)
 
 ---
 
