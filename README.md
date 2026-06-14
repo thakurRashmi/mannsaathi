@@ -1,6 +1,6 @@
 # MannSaathi (मन साथी)
 
-> Multi-agent AI mental wellness companion. Runs Gemma 2B locally via Ollama. Hybrid rules + LLM crisis-detection gate routes users to real helplines.
+> A web chat app for people who need to talk things out when no one else is around. Multi-agent LangGraph with on-device Gemma 2B, plus a hybrid rules + LLM safety layer that routes real crisis language to verified helplines.
 
 **Status:** ✅ Working MVP. Local development on Docker.
 
