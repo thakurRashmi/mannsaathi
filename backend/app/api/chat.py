@@ -1,18 +1,18 @@
 """
-Chat endpoint. Calls the Listener agent to generate a real response.
+Chat endpoint. Runs the LangGraph conversation graph for each turn.
 
-In Task #5, the single-agent call will be replaced by a LangGraph run
-that coordinates Listener + Reflector + Crisis Detector. The HTTP
-contract on this endpoint stays the same — that's the point of putting
-agent logic behind `agents/`.
+The HTTP contract here is intentionally simple — request in, reply out.
+All the multi-agent complexity lives behind `agents.graph.run_conversation`.
+Swapping the agent topology (adding a Crisis Detector in Task #6, adding
+memory layers later) does NOT change this file.
 """
 import logging
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.agents.listener import listen
+from app.agents.graph import run_conversation
 
 log = logging.getLogger("mannsaathi.api.chat")
 
@@ -31,22 +31,33 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
-    # When crisis detection kicks in (Task #6), this flag tells the
-    # frontend to show the helpline escalation UI instead of a normal
-    # chat bubble.
+    # When crisis detection kicks in (Task #6), this flag tells the frontend
+    # to show the helpline escalation UI instead of a normal chat bubble.
     is_crisis: bool = False
+    # Observability fields — useful in dev / interview demos, ignored by the
+    # current frontend. Lets you see "which agent answered me and why".
+    route: Optional[str] = None
+    route_reason: Optional[str] = None
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> ChatResponse:
     try:
-        # Pydantic models -> plain dicts for the agent layer.
         history = [m.model_dump() for m in req.history]
-        reply = await listen(history=history, user_message=req.message)
-        return ChatResponse(reply=reply)
+        result = await run_conversation(
+            user_message=req.message, history=history
+        )
+        log.info(
+            "chat :: route=%s reason=%s",
+            result.get("route"),
+            result.get("route_reason"),
+        )
+        return ChatResponse(
+            reply=result["reply"],
+            route=result.get("route"),
+            route_reason=result.get("route_reason"),
+        )
     except Exception as e:
-        # Don't leak stack traces to the client — show a calm fallback.
-        # We log the real error server-side for debugging.
         log.exception("chat endpoint failed: %s", e)
         raise HTTPException(
             status_code=503,
