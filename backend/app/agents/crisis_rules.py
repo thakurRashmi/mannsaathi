@@ -76,16 +76,24 @@ _DISCUSSION_CONTEXT_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 
-# Suicide / suicidal ideation
+# Suicide / suicidal ideation.
+# Patterns are tuned for ZERO false-negatives on direct ideation. Each
+# new pattern below was added in response to a real eval failure —
+# do not delete without re-running tests/eval/runner.py.
 _SUICIDE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\bkill (myself|my self)\b"),
     re.compile(r"\b(commit )?suicide\b"),
-    re.compile(r"\bend (my|it|the) life\b"),
-    re.compile(r"\bend it all\b"),
-    re.compile(r"\bend (my|it) (all|now)\b"),
+    # Cover "end my life" / "ending my life" / "ended my life" via stem.
+    re.compile(r"\bend(ing|ed)? (my|the) life\b"),
+    re.compile(r"\bend(ing)? it all\b"),
+    # Bare "end it" only fires when paired with "want to" / "going to"
+    # to avoid matching benign "let's just end it" / "end it here" (work).
+    re.compile(r"\b(want|going|trying) to end it\b"),
+    re.compile(r"\bend (my|it|the) (life|all|now)\b"),
     re.compile(r"\bi want to die\b"),
     re.compile(r"\bi wanna die\b"),
     re.compile(r"\bwant to (just )?die\b"),
+    re.compile(r"\bby dying\b"),
     # "dont want to live" with optional "anymore"
     re.compile(r"\bdont want to (live|be here|exist)( anymore)?\b"),
     re.compile(r"\bdo not want to (live|be here|exist)( anymore)?\b"),
@@ -94,13 +102,14 @@ _SUICIDE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\b(everyone|world) would be better (off )?without me\b"),
     re.compile(r"\bi cant go on\b"),
     re.compile(r"\bi can not go on\b"),
-    re.compile(r"\b(taking|going to take) my (own )?life\b"),
+    # "take my own life", "take my life", "taking my life", "want to take my life"
+    re.compile(r"\b(taking|going to take|want to take|take) my (own )?life\b"),
     re.compile(r"\bjump off (a |the )?(bridge|building|roof)\b"),
     re.compile(r"\bhang myself\b"),
     re.compile(r"\boverdose\b"),
     re.compile(r"\bsleeping pills\b.*\b(many|all|whole)\b"),
     re.compile(r"\b(many|all|whole)\b.*\bsleeping pills\b"),
-    re.compile(r"\bthinking (of|about) (suicide|killing myself|ending it)\b"),
+    re.compile(r"\bthinking (of|about) (suicide|killing myself|ending (it|my life))\b"),
     re.compile(r"\bsuicidal\b"),
 ]
 
@@ -116,8 +125,9 @@ _SELF_HARM_PATTERNS: list[re.Pattern[str]] = [
 
 # Imminent danger to others — out of scope for an AI companion; route immediately.
 _VIOLENCE_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"\b(kill|hurt|harm) (him|her|them|someone|her self|him self)\b"),
+    re.compile(r"\b(kill|hurt|harm|shoot|stab) (him|her|them|someone|her self|him self)\b"),
     re.compile(r"\bgoing to (kill|shoot|stab|hurt)\b"),
+    re.compile(r"\bwant to (kill|shoot|stab|hurt) (him|her|them|someone)\b"),
 ]
 
 # Being abused / in immediate danger from someone else.

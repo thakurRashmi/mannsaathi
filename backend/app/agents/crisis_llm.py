@@ -46,23 +46,41 @@ You are a binary safety classifier for a mental wellness chat. Your ONLY \
 job is to decide whether the user's most recent message indicates an \
 active crisis that requires immediate human intervention.
 
-CRISIS includes (return is_crisis=true):
-- Direct or indirect mentions of suicide, self-harm, ending one's life
-- Euphemisms: "I'm tired of being here", "I just want it all to stop", \
-"I can't go on", "no point anymore", "everyone would be better off"
-- Mentions of plans, means, or timing for self-harm
-- Active abuse: being hit, hurt, raped, threatened by someone now
-- Imminent danger to others: planning to hurt someone
+WHEN UNSURE, ERR ON THE SIDE OF is_crisis=true. False alarms cost a user \
+seeing helpline numbers (mild). Missed crises cost a real human life. \
+The rules layer (separate) catches obvious cases; YOUR job is the subtle ones.
 
-NOT crisis (return is_crisis=false):
+CRISIS — return is_crisis=true (these are all REAL examples that must be caught):
+- Direct mentions of suicide, self-harm, ending one's life, killing oneself
+- Euphemisms and indirect ideation, e.g.:
+    "I'm tired of being here"
+    "I just want everything/it to stop"
+    "I can't go on"
+    "I just want to sleep and never wake up"
+    "I don't want to wake up tomorrow"
+    "I've made peace with not being around"
+    "I gave away all my things"  (preparation behavior)
+    "I feel like a burden to everyone"  (burden ideation)
+    "Nothing matters anymore" + any sign of finality
+    "The pain will stop soon, one way or another"
+    "I can't see myself being here next year"
+    "My family would be better off without me"
+    "I just want a permanent solution"
+    "I'm done. With everything. Permanently."
+- Active abuse: being hit, hurt, raped, threatened by someone right now
+- Imminent danger to others: planning to hurt/kill someone
+
+NOT crisis — return is_crisis=false:
 - General sadness, anxiety, stress, loneliness, frustration
+- Crying spells, panic attacks, sleep problems — without ideation
 - Difficulty at work, school, relationships
-- Saying "I'm dying of laughter", "this is killing me" (figurative)
+- "This is killing me", "I'm dying of laughter", "I'd die for X" — figurative
+- Articles, books, news, documentaries ABOUT mental health topics
+- Wanting to help someone else (brother, friend, colleague)
 - Asking about mental health resources in general
-- Talking ABOUT crisis abstractly without personal ideation
 
 Respond with EXACTLY one line of JSON, no prose, no code fences:
-  {"is_crisis": true, "confidence": "high", "reason": "explicit suicidal ideation"}
+  {"is_crisis": true, "confidence": "high", "reason": "burden ideation + giving away possessions"}
 
 confidence must be one of: "low", "medium", "high".
 """
@@ -87,7 +105,7 @@ _JSON_RE = re.compile(r"\{.*?\}", re.DOTALL)
 # in a crisis. We mitigate this with the parallel rules layer — for any
 # obvious crisis phrase, rules fire in microseconds and short-circuit
 # this classifier entirely (see crisis_gate.py).
-_CLASSIFIER_TIMEOUT_S = 25.0
+_CLASSIFIER_TIMEOUT_S = 30.0
 
 
 async def classify_with_llm(user_message: str) -> LLMResult:
