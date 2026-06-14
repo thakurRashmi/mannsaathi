@@ -1,6 +1,6 @@
 # MannSaathi (मन साथी)
 
-> A privacy-first AI companion for emotional support — not a therapist, not a chatbot, but a calm space to talk things out when no one else is around.
+> Multi-agent AI mental wellness companion. Runs Gemma 2B locally via Ollama. Hybrid rules + LLM crisis-detection gate routes users to real helplines.
 
 **Status:** ✅ Working MVP. Local development on Docker.
 
@@ -8,15 +8,14 @@
 
 ## Why this exists
 
-For every one Indian who actually sees a therapist, four more never get past the first hurdle: *"Is this even worth talking about?"*
+In India, roughly 1 in 7 people experiences a mental health issue — and only a fraction get any kind of support. The gap isn't just access to therapists. It's the much bigger group of people who never seek help at all, often because *"is this even worth talking about?"*
 
-MannSaathi sits in that gap. It's:
-- ✅ A calm listener for venting, processing a rough day, or feeling lonely
-- ✅ A pattern-noticing partner when you want to go deeper (*"why does this keep happening to me?"*)
-- ✅ A safety net that **routes to real human helplines** when something serious is happening
-- ❌ Not therapy. Not medical advice. Not for diagnosed mental illness.
+MannSaathi is built for that middle space:
+- A calm listener for venting, processing a rough day, or feeling lonely
+- A pattern-noticing partner when you want to go deeper (*"why does this keep happening to me?"*)
+- A safety layer that recognizes real crisis language and routes users to vetted human helplines
 
-It's the conversational equivalent of three deep breaths with a friend who listens well.
+It's intentionally narrow: low-friction, available at 2am, on-device. For anything clinical, it surfaces the right phone numbers.
 
 ---
 
